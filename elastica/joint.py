@@ -43,18 +43,18 @@ class FreeJoint:
         self.k = k
         self.nu = nu
 
-    def apply_forces(self, rod_one, index_one, rod_two, index_two):
+    def apply_forces(self, system_one, index_one, system_two, index_two):
         """
         Apply joint force to the connected rod objects.
 
         Parameters
         ----------
-        rod_one : object
-            Rod-like object
+        system_one : object
+            Body 1 (e.g. Rod or RigidBody)
         index_one : int
             Index of first rod for joint.
-        rod_two : object
-            Rod-like object
+        system_two : object
+            Body 2 (e.g. Rod or RigidBody)
         index_two : int
             Index of second rod for joint.
 
@@ -63,15 +63,15 @@ class FreeJoint:
 
         """
         end_distance_vector = (
-            rod_two.position_collection[..., index_two]
-            - rod_one.position_collection[..., index_one]
+                system_two.position_collection[..., index_two]
+                - system_one.position_collection[..., index_one]
         )
         # Calculate norm of end_distance_vector
         # this implementation timed: 2.48 µs ± 126 ns per loop (mean ± std. dev. of 7 runs, 100000 loops each)
         end_distance = np.sqrt(np.dot(end_distance_vector, end_distance_vector))
 
         # Below if check is not efficient find something else
-        # We are checking if end of rod1 and start of rod2 are at the same point in space
+        # We are checking if end of system_one and start of system_two are at the same point in space
         # If they are at the same point in space, it is a zero vector.
         if end_distance <= Tolerance.atol():
             normalized_end_distance_vector = np.array([0.0, 0.0, 0.0])
@@ -81,8 +81,8 @@ class FreeJoint:
         elastic_force = self.k * end_distance_vector
 
         relative_velocity = (
-            rod_two.velocity_collection[..., index_two]
-            - rod_one.velocity_collection[..., index_one]
+                system_two.velocity_collection[..., index_two]
+                - system_one.velocity_collection[..., index_one]
         )
         normal_relative_velocity = (
             np.dot(relative_velocity, normalized_end_distance_vector)
@@ -92,12 +92,12 @@ class FreeJoint:
 
         contact_force = elastic_force + damping_force
 
-        rod_one.external_forces[..., index_one] += contact_force
-        rod_two.external_forces[..., index_two] -= contact_force
+        system_one.external_forces[..., index_one] += contact_force
+        system_two.external_forces[..., index_two] -= contact_force
 
         return
 
-    def apply_torques(self, rod_one, index_one, rod_two, index_two):
+    def apply_torques(self, system_one, index_one, system_two, index_two):
         """
         Apply restoring joint torques to the connected rod objects.
 
@@ -105,12 +105,12 @@ class FreeJoint:
 
         Parameters
         ----------
-        rod_one : object
-            Rod-like object
+        system_one : object
+            Body 1 (e.g. Rod or RigidBody)
         index_one : int
             Index of first rod for joint.
-        rod_two : object
-            Rod-like object
+        system_two : object
+            Body 2 (e.g. Rod or RigidBody)
         index_two : int
             Index of second rod for joint.
 
@@ -166,15 +166,15 @@ class HingeJoint(FreeJoint):
         self.kt = kt
 
     # Apply force is same as free joint
-    def apply_forces(self, rod_one, index_one, rod_two, index_two):
-        return super().apply_forces(rod_one, index_one, rod_two, index_two)
+    def apply_forces(self, system_one, index_one, system_two, index_two):
+        return super().apply_forces(system_one, index_one, system_two, index_two)
 
-    def apply_torques(self, rod_one, index_one, rod_two, index_two):
+    def apply_torques(self, system_one, index_one, system_two, index_two):
         # current direction of the first element of link two
         # also NOTE: - rod two is hinged at first element
         link_direction = (
-            rod_two.position_collection[..., index_two + 1]
-            - rod_two.position_collection[..., index_two]
+                system_two.position_collection[..., index_two + 1]
+                - system_two.position_collection[..., index_two]
         )
 
         # projection of the link direction onto the plane normal
@@ -186,11 +186,11 @@ class HingeJoint(FreeJoint):
         torque = self.kt * np.cross(link_direction, force_direction)
 
         # The opposite torque will be applied on link one
-        rod_one.external_torques[..., index_one] -= (
-            rod_one.director_collection[..., index_one] @ torque
+        system_one.external_torques[..., index_one] -= (
+                system_one.director_collection[..., index_one] @ torque
         )
-        rod_two.external_torques[..., index_two] += (
-            rod_two.director_collection[..., index_two] @ torque
+        system_two.external_torques[..., index_two] += (
+                system_two.director_collection[..., index_two] @ torque
         )
 
 
@@ -229,15 +229,15 @@ class FixedJoint(FreeJoint):
         self.kt = kt
 
     # Apply force is same as free joint
-    def apply_forces(self, rod_one, index_one, rod_two, index_two):
-        return super().apply_forces(rod_one, index_one, rod_two, index_two)
+    def apply_forces(self, system_one, index_one, system_two, index_two):
+        return super().apply_forces(system_one, index_one, system_two, index_two)
 
-    def apply_torques(self, rod_one, index_one, rod_two, index_two):
+    def apply_torques(self, system_one, index_one, system_two, index_two):
         # current direction of the first element of link two
         # also NOTE: - rod two is fixed at first element
         link_direction = (
-            rod_two.position_collection[..., index_two + 1]
-            - rod_two.position_collection[..., index_two]
+                system_two.position_collection[..., index_two + 1]
+                - system_two.position_collection[..., index_two]
         )
 
         # To constrain the orientation of link two, the second node of link two should align with
@@ -246,11 +246,11 @@ class FixedJoint(FreeJoint):
         # should overlap.
 
         tgt_destination = (
-            rod_one.position_collection[..., index_one]
-            + rod_two.rest_lengths[index_two] * rod_one.tangents[..., index_one]
+                system_one.position_collection[..., index_one]
+                + system_two.rest_lengths[index_two] * system_one.tangents[..., index_one]
         )  # dl of rod 2 can be different than rod 1 so use rest length of rod 2
 
-        curr_destination = rod_two.position_collection[
+        curr_destination = system_two.position_collection[
             ..., index_two + 1
         ]  # second element of rod2
 
@@ -261,11 +261,11 @@ class FixedJoint(FreeJoint):
         torque = np.cross(link_direction, forcedirection)
 
         # The opposite torque will be applied on link one
-        rod_one.external_torques[..., index_one] -= (
-            rod_one.director_collection[..., index_one] @ torque
+        system_one.external_torques[..., index_one] -= (
+                system_one.director_collection[..., index_one] @ torque
         )
-        rod_two.external_torques[..., index_two] += (
-            rod_two.director_collection[..., index_two] @ torque
+        system_two.external_torques[..., index_two] += (
+                system_two.director_collection[..., index_two] @ torque
         )
 
 
@@ -761,20 +761,20 @@ class ExternalContact(FreeJoint):
     def __init__(self, k, nu):
         super().__init__(k, nu)
 
-    def apply_forces(self, rod_one, index_one, rod_two, index_two):
+    def apply_forces(self, system_one, index_one, system_two, index_two):
         # del index_one, index_two
 
         # TODO: raise error during the initialization if rod one is rigid body.
 
         # If rod two has one element, then it is rigid body.
-        if rod_two.n_elems == 1:
-            cylinder_two = rod_two
+        if system_two.n_elems == 1:
+            cylinder_two = system_two
             # First, check for a global AABB bounding box, and see whether that
             # intersects
             if _prune_using_aabbs_rod_rigid_body(
-                rod_one.position_collection,
-                rod_one.radius,
-                rod_one.lengths,
+                system_one.position_collection,
+                system_one.radius,
+                system_one.lengths,
                 cylinder_two.position_collection,
                 cylinder_two.director_collection,
                 cylinder_two.radius[0],
@@ -788,16 +788,16 @@ class ExternalContact(FreeJoint):
             )
 
             _calculate_contact_forces_rod_rigid_body(
-                rod_one.position_collection[..., :-1],
-                rod_one.lengths * rod_one.tangents,
+                system_one.position_collection[..., :-1],
+                system_one.lengths * system_one.tangents,
                 x_cyl,
                 cylinder_two.length * cylinder_two.director_collection[2, :, 0],
-                rod_one.radius + cylinder_two.radius,
-                rod_one.lengths + cylinder_two.length,
-                rod_one.internal_forces,
-                rod_one.external_forces,
+                system_one.radius + cylinder_two.radius,
+                system_one.lengths + cylinder_two.length,
+                system_one.internal_forces,
+                system_one.external_forces,
                 cylinder_two.external_forces,
-                rod_one.velocity_collection,
+                system_one.velocity_collection,
                 cylinder_two.velocity_collection,
                 self.k,
                 self.nu,
@@ -808,34 +808,34 @@ class ExternalContact(FreeJoint):
             # intersects
 
             if _prune_using_aabbs_rod_rod(
-                rod_one.position_collection,
-                rod_one.radius,
-                rod_one.lengths,
-                rod_two.position_collection,
-                rod_two.radius,
-                rod_two.lengths,
+                system_one.position_collection,
+                system_one.radius,
+                system_one.lengths,
+                system_two.position_collection,
+                system_two.radius,
+                system_two.lengths,
             ):
                 return
 
             _calculate_contact_forces_rod_rod(
-                rod_one.position_collection[
+                system_one.position_collection[
                     ..., :-1
                 ],  # Discount last node, we want element start position
-                rod_one.radius,
-                rod_one.lengths,
-                rod_one.tangents,
-                rod_one.velocity_collection,
-                rod_one.internal_forces,
-                rod_one.external_forces,
-                rod_two.position_collection[
+                system_one.radius,
+                system_one.lengths,
+                system_one.tangents,
+                system_one.velocity_collection,
+                system_one.internal_forces,
+                system_one.external_forces,
+                system_two.position_collection[
                     ..., :-1
                 ],  # Discount last node, we want element start position
-                rod_two.radius,
-                rod_two.lengths,
-                rod_two.tangents,
-                rod_two.velocity_collection,
-                rod_two.internal_forces,
-                rod_two.external_forces,
+                system_two.radius,
+                system_two.lengths,
+                system_two.tangents,
+                system_two.velocity_collection,
+                system_two.internal_forces,
+                system_two.external_forces,
                 self.k,
                 self.nu,
             )
@@ -850,18 +850,18 @@ class SelfContact(FreeJoint):
     def __init__(self, k, nu):
         super().__init__(k, nu)
 
-    def apply_forces(self, rod_one, index_one, rod_two, index_two):
+    def apply_forces(self, system_one, index_one, system_two, index_two):
         # del index_one, index_two
 
         _calculate_contact_forces_self_rod(
-            rod_one.position_collection[
+            system_one.position_collection[
                 ..., :-1
             ],  # Discount last node, we want element start position
-            rod_one.radius,
-            rod_one.lengths,
-            rod_one.tangents,
-            rod_one.velocity_collection,
-            rod_one.external_forces,
+            system_one.radius,
+            system_one.lengths,
+            system_one.tangents,
+            system_one.velocity_collection,
+            system_one.external_forces,
             self.k,
             self.nu,
         )
