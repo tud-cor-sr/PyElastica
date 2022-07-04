@@ -81,3 +81,15 @@ class Cylinder(RigidBodyBase):
         self.external_torques = np.zeros((MaxDimension.value())).reshape(
             MaxDimension.value(), 1
         )
+
+    def compute_position_of_bottom(self):
+        return self.compute_position_of_point(np.array([[0.], [0.], [self.length / 2]])).squeeze()
+
+    def compute_position_of_top(self):
+        return self.compute_position_of_point(np.array([[0.], [0.], [self.length / 2]])).squeeze()
+
+    def compute_velocity_of_bottom(self):
+        return self.compute_velocity_of_point(np.array([[0.], [0.], [self.length / 2]])).squeeze()
+
+    def compute_velocity_of_top(self):
+        return self.compute_velocity_of_point(np.array([[0.], [0.], [self.length / 2]])).squeeze()
