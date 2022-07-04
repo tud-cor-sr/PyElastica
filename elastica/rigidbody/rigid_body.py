@@ -104,3 +104,11 @@ class RigidBodyBase(ABC):
             "ijk,jk->ik", self.mass_second_moment_of_inertia, self.omega_collection
         )
         return 0.5 * np.einsum("ik,ik->k", self.omega_collection, J_omega).sum()
+
+    def compute_position_of_point(self, point):
+        position = self.position_collection + _batch_matvec(self.director_collection, point)
+        return position
+
+    def compute_velocity_of_point(self, point):
+        velocity = self.velocity_collection + _batch_cross(self.omega_collection, point)
+        return velocity
