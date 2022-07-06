@@ -7,12 +7,14 @@ from mpl_toolkits import mplot3d
 def plot_position(
     plot_params_rod1: dict,
     plot_params_rod2: dict,
+    plot_params_cylinder: dict = None,
     filename="spherical_joint_test.png",
     SAVE_FIGURE=False,
 ):
 
     position_of_rod1 = np.array(plot_params_rod1["position"])
     position_of_rod2 = np.array(plot_params_rod2["position"])
+    position_of_cylinder = np.array(plot_params_cylinder["position"]) if plot_params_cylinder is not None else None
 
     fig = plt.figure(figsize=(10, 10), frameon=True, dpi=150)
     ax = fig.add_subplot(111)
@@ -26,6 +28,13 @@ def plot_position(
         c=to_rgb("xkcd:bluish"),
         label="rod2",
     )
+    if position_of_cylinder is not None:
+        ax.plot(
+            position_of_cylinder[:, 0, -1],
+            position_of_cylinder[:, 1, -1],
+            c=to_rgb("xkcd:greenish"),
+            label="cylinder",
+        )
 
     fig.legend(prop={"size": 20})
 
@@ -38,6 +47,7 @@ def plot_position(
 def plot_video(
     plot_params_rod1: dict,
     plot_params_rod2: dict,
+    plot_params_cylinder: dict = None,
     video_name="video.mp4",
     margin=0.2,
     fps=15,
@@ -47,6 +57,7 @@ def plot_video(
     time = plot_params_rod1["time"]
     position_of_rod1 = np.array(plot_params_rod1["position"])
     position_of_rod2 = np.array(plot_params_rod2["position"])
+    position_of_cylinder = np.array(plot_params_cylinder["position"]) if plot_params_cylinder is not None else None
 
     print("plot video")
     FFMpegWriter = manimation.writers["ffmpeg"]
@@ -74,16 +85,26 @@ def plot_video(
                 c=to_rgb("xkcd:bluish"),
                 label="rod2",
             )
+            if position_of_cylinder is not None:
+                ax.plot(
+                    position_of_cylinder[time, 0],
+                    position_of_cylinder[time, 1],
+                    position_of_cylinder[time, 2],
+                    "o",
+                    c=to_rgb("xkcd:greenish"),
+                    label="cylinder",
+                )
 
             ax.set_xlim(-0.25, 0.25)
             ax.set_ylim(-0.25, 0.25)
-            ax.set_zlim(0, 0.4)
+            ax.set_zlim(0, 0.61)
             writer.grab_frame()
 
 
 def plot_video_xy(
     plot_params_rod1: dict,
     plot_params_rod2: dict,
+    plot_params_cylinder: dict = None,
     video_name="video.mp4",
     margin=0.2,
     fps=15,
@@ -93,6 +114,7 @@ def plot_video_xy(
     time = plot_params_rod1["time"]
     position_of_rod1 = np.array(plot_params_rod1["position"])
     position_of_rod2 = np.array(plot_params_rod2["position"])
+    position_of_cylinder = np.array(plot_params_cylinder["position"]) if plot_params_cylinder is not None else None
 
     print("plot video")
     FFMpegWriter = manimation.writers["ffmpeg"]
@@ -113,6 +135,14 @@ def plot_video_xy(
                 c=to_rgb("xkcd:bluish"),
                 label="rod2",
             )
+            if position_of_cylinder is not None:
+                plt.plot(
+                    position_of_cylinder[time, 0],
+                    position_of_cylinder[time, 1],
+                    "o",
+                    c=to_rgb("xkcd:greenish"),
+                    label="cylinder",
+                )
 
             plt.xlim([-0.25, 0.25])
             plt.ylim([-0.25, 0.25])
@@ -122,6 +152,7 @@ def plot_video_xy(
 def plot_video_xz(
     plot_params_rod1: dict,
     plot_params_rod2: dict,
+    plot_params_cylinder: dict = None,
     video_name="video.mp4",
     margin=0.2,
     fps=15,
@@ -131,6 +162,7 @@ def plot_video_xz(
     time = plot_params_rod1["time"]
     position_of_rod1 = np.array(plot_params_rod1["position"])
     position_of_rod2 = np.array(plot_params_rod2["position"])
+    position_of_cylinder = np.array(plot_params_cylinder["position"]) if plot_params_cylinder is not None else None
 
     print("plot video")
     FFMpegWriter = manimation.writers["ffmpeg"]
@@ -151,7 +183,16 @@ def plot_video_xz(
                 c=to_rgb("xkcd:bluish"),
                 label="rod2",
             )
+            if position_of_cylinder is not None:
+                # TODO: improve visualization of cylinder
+                plt.plot(
+                    position_of_cylinder[time, 0],
+                    position_of_cylinder[time, 2],
+                    "o",
+                    c=to_rgb("xkcd:greenish"),
+                    label="cylinder",
+                )
 
             plt.xlim([-0.25, 0.25])
-            plt.ylim([0, 0.41])
+            plt.ylim([0, 0.61])
             writer.grab_frame()
