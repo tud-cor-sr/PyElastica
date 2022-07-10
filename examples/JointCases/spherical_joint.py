@@ -10,6 +10,7 @@ from elastica import *
 from examples.JointCases.external_force_class_for_joint_test import (
     EndpointForcesSinusoidal,
 )
+from examples.JointCases.joint_cases_callback import JointCasesCallback
 from examples.JointCases.joint_cases_postprocessing import (
     plot_position,
     plot_video,
@@ -109,41 +110,19 @@ spherical_joint_sim.add_forcing_to(rod2).using(
     normal_direction=normal,
 )
 
-
-# Callback functions
-# Add call backs
-class TestJoints(CallBackBaseClass):
-    """
-    Call back function for testing joints
-    """
-
-    def __init__(self, step_skip: int, callback_params: dict):
-        CallBackBaseClass.__init__(self)
-        self.every = step_skip
-        self.callback_params = callback_params
-
-    def make_callback(self, system, time, current_step: int):
-        if current_step % self.every == 0:
-            self.callback_params["time"].append(time)
-            self.callback_params["step"].append(current_step)
-            self.callback_params["position"].append(system.position_collection.copy())
-            self.callback_params["velocity"].append(system.velocity_collection.copy())
-            return
-
-
 pp_list_rod1 = defaultdict(list)
 pp_list_rod2 = defaultdict(list)
 pp_list_cylinder = defaultdict(list)
 
 
 spherical_joint_sim.collect_diagnostics(rod1).using(
-    TestJoints, step_skip=1000, callback_params=pp_list_rod1
+    JointCasesCallback, step_skip=1000, callback_params=pp_list_rod1
 )
 spherical_joint_sim.collect_diagnostics(rod2).using(
-    TestJoints, step_skip=1000, callback_params=pp_list_rod2
+    JointCasesCallback, step_skip=1000, callback_params=pp_list_rod2
 )
 spherical_joint_sim.collect_diagnostics(cylinder).using(
-    TestJoints, step_skip=1000, callback_params=pp_list_cylinder
+    JointCasesCallback, step_skip=1000, callback_params=pp_list_cylinder
 )
 
 spherical_joint_sim.finalize()
