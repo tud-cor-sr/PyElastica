@@ -116,8 +116,10 @@ class FreeJoint:
         contact_force = elastic_force + damping_force
 
         i = 0
-        for system, index, point, system_position in zip([system_one, system_two], [index_one, index_two],
-                                                         [self.point_system_one, self.point_system_two], system_positions):
+        for system, index, point, system_position in zip([system_one, system_two],
+                                                         [index_one, index_two],
+                                                         [self.point_system_one, self.point_system_two],
+                                                         system_positions):
             external_force = (1 - 2 * i) * contact_force
 
             if np.array_equal(point, np.array([0., 0., 0.])):
