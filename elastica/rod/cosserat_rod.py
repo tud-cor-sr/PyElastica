@@ -492,6 +492,31 @@ class CosseratRod(RodBase, KnotTheory):
 
         return sum_mass_times_position / self.mass.sum()
 
+    def compute_position_point(self, point=np.array([0., 0., 0.]), index: int = None):
+        """
+        Compute position in world frame of point of specified in local frame of node
+        """
+        if index is None:
+            # batched implementation for all nodes
+            position = self.position_collection + _batch_matvec(self.director_collection, point)
+        else:
+            # only compute for one
+            print("director", self.director_collection[..., index], "point", point)
+            position = self.position_collection[..., index] + np.dot(self.director_collection[..., index], point)
+        return position
+
+    def compute_velocity_point(self, point=np.array([0., 0., 0.]), index: int = None):
+        """
+        Compute velocity in world frame of point specified in local frame of node
+        """
+        if index is None:
+            # batched implementation for all nodes
+            velocity = self.velocity_collection + _batch_cross(self.omega_collection, point)
+        else:
+            # only compute for one node
+            velocity = self.velocity_collection[..., index] + np.dot(self.omega_collection[..., index], point)
+        return velocity
+
     def compute_bending_energy(self):
         """
         Compute total bending energy of the rod at the instance.

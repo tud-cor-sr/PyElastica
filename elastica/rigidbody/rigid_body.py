@@ -105,10 +105,37 @@ class RigidBodyBase(ABC):
         )
         return 0.5 * np.einsum("ik,ik->k", self.omega_collection, J_omega).sum()
 
-    def compute_position_of_point(self, point):
-        position = self.position_collection + _batch_matvec(self.director_collection, point)
+    def compute_position_point(self, point=np.array([0., 0., 0.]), index: int = None):
+        """
+        Compute position in world frame of point of specified in local frame of node
+        """
+        if index is None:
+            # batched implementation for all nodes
+            position = self.position_collection + _batch_matvec(self.director_collection, point)
+        else:
+            # only compute for one node
+            position = self.position_collection[..., index] + np.dot(self.director_collection[..., index], point)
         return position
 
-    def compute_velocity_of_point(self, point):
-        velocity = self.velocity_collection + _batch_cross(self.omega_collection, point)
+    def compute_velocity_point(self, point=np.array([0., 0., 0.]), index: int = None):
+        """
+        Compute velocity in world frame of point specified in local frame of node
+        """
+        if index is None:
+            # batched implementation for all nodes
+            velocity = self.velocity_collection + _batch_cross(self.omega_collection, point)
+        else:
+            # only compute for one node
+            velocity = self.velocity_collection[..., index] + np.dot(self.omega_collection[..., index], point)
         return velocity
+
+    # def apply_external_forces_at_point(self, force, point=np.array([0., 0., 0.]), index: int = None):
+    #     """
+    #     Apply force at point in local frame of node
+    #     """
+    #     if index is None:
+    #         # batched implementation for all nodes
+    #         self.external_forces += _batch_matvec(self.director_collection, force)
+    #     else:
+    #         # only compute for one node
+    #         self.external_forces[..., index] += np.dot(self.director_collection[..., index], force)

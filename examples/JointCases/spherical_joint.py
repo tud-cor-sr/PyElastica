@@ -95,9 +95,9 @@ spherical_joint_sim.connect(
     FreeJoint, k=1e5, nu=0
 )  # k=kg/s2 nu=kg/s 1e-2
 # Connect rod 2 and cylinder
-# spherical_joint_sim.connect(
-#     first_rod=rod2, second_rod=cylinder, first_connect_idx=-1, second_connect_idx=0
-# ).using(FreeJoint, k=1e5, nu=0)
+spherical_joint_sim.connect(
+    first_rod=rod2, second_rod=cylinder, first_connect_idx=-1, second_connect_idx=0
+).using(FreeJoint, k=1e5, nu=0, point_system_two=np.array([0., 0., -base_length / 2]))
 
 # Add forces to rod2
 spherical_joint_sim.add_forcing_to(rod2).using(

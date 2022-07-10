@@ -1,5 +1,6 @@
 __doc__ = """ Module containing joint classes to connect multiple rods together. """
 __all__ = ["FreeJoint", "HingeJoint", "FixedJoint", "ExternalContact", "SelfContact"]
+
 import numpy as np
 import numba
 from elastica.utils import Tolerance, MaxDimension
@@ -23,13 +24,19 @@ class FreeJoint:
             Stiffness coefficient of the joint.
         nu: float
             Damping coefficient of the joint.
+        point_system_one : numpy.ndarray
+            Describes for system one the translation from the center of mass
+            to the joint in the local coordinate system of system one
+        point_system_two : numpy.ndarray
+            Describes for system two the translation from the center of mass
+            to the joint in the local coordinate system of system two
 
     """
 
     # pass the k and nu for the forces
     # also the necessary rods for the joint
     # indices should be 0 or -1, we will provide wrappers for users later
-    def __init__(self, k, nu):
+    def __init__(self, k, nu, point_system_one=np.array([0., 0., 0.]), point_system_two=np.array([0., 0., 0.])):
         """
 
         Parameters
@@ -38,10 +45,17 @@ class FreeJoint:
            Stiffness coefficient of the joint.
         nu: float
            Damping coefficient of the joint.
+        point_system_one : numpy.ndarray
+            Describes for system one the translation from the center of mass
+            to the joint in the local coordinate system of system one
+        point_system_two : numpy.ndarray
+            Describes for system two the translation from the center of mass
+            to the joint in the local coordinate system of system two
 
         """
         self.k = k
         self.nu = nu
+        self.point_system_one, self.point_system_two = point_system_one, point_system_two
 
     def apply_forces(self, system_one, index_one, system_two, index_two):
         """
@@ -62,10 +76,22 @@ class FreeJoint:
         -------
 
         """
-        end_distance_vector = (
-                system_two.position_collection[..., index_two]
-                - system_one.position_collection[..., index_one]
-        )
+        system_positions = []
+        system_velocities = []
+        for system, index, point in zip([system_one, system_two], [index_one, index_two],
+                                        [self.point_system_one, self.point_system_two]):
+            if np.array_equal(point, np.array([0., 0., 0.])):
+                # we can save us the computation
+                system_position = system.position_collection[..., index]
+                system_velocity = system.velocity_collection[..., index]
+            else:
+                system_position = system.compute_position_point(point=point, index=index)
+                system_velocity = system.compute_velocity_point(point=point, index=index)
+
+            system_positions.append(system_position)
+            system_velocities.append(system_velocity)
+
+        end_distance_vector = system_positions[1] - system_positions[0]
         # Calculate norm of end_distance_vector
         # this implementation timed: 2.48 µs ± 126 ns per loop (mean ± std. dev. of 7 runs, 100000 loops each)
         end_distance = np.sqrt(np.dot(end_distance_vector, end_distance_vector))
@@ -80,20 +106,31 @@ class FreeJoint:
 
         elastic_force = self.k * end_distance_vector
 
-        relative_velocity = (
-                system_two.velocity_collection[..., index_two]
-                - system_one.velocity_collection[..., index_one]
-        )
+        relative_velocity = system_velocities[1] - system_velocities[0]
         normal_relative_velocity = (
-            np.dot(relative_velocity, normalized_end_distance_vector)
-            * normalized_end_distance_vector
+                np.dot(relative_velocity, normalized_end_distance_vector)
+                * normalized_end_distance_vector
         )
         damping_force = -self.nu * normal_relative_velocity
 
         contact_force = elastic_force + damping_force
 
-        system_one.external_forces[..., index_one] += contact_force
-        system_two.external_forces[..., index_two] -= contact_force
+        i = 0
+        for system, index, point, system_position in zip([system_one, system_two], [index_one, index_two],
+                                                         [self.point_system_one, self.point_system_two], system_positions):
+            external_force = (1 - 2 * i) * contact_force
+
+            if np.array_equal(point, np.array([0., 0., 0.])):
+                # we can save us the computation
+                system.external_forces[..., index] += external_force
+            else:
+                vector_center_to_point = system.position_collection[..., index] - system_position
+                external_torque = np.cross(vector_center_to_point, external_force)
+
+                system.external_forces[..., index] += external_force
+                system.external_torques[..., index] += external_torque
+
+            i += 1
 
         return
 
@@ -179,7 +216,7 @@ class HingeJoint(FreeJoint):
 
         # projection of the link direction onto the plane normal
         force_direction = (
-            -np.dot(link_direction, self.normal_direction) * self.normal_direction
+                -np.dot(link_direction, self.normal_direction) * self.normal_direction
         )
 
         # compute the restoring torque
@@ -256,7 +293,7 @@ class FixedJoint(FreeJoint):
 
         # Compute the restoring torque
         forcedirection = -self.kt * (
-            curr_destination - tgt_destination
+                curr_destination - tgt_destination
         )  # force direction is between rod2 2nd element and rod1
         torque = np.cross(link_direction, forcedirection)
 
@@ -360,19 +397,19 @@ def _find_min_dist(x1, e1, x2, e2):
 
 @numba.njit(cache=True)
 def _calculate_contact_forces_rod_rigid_body(
-    x_collection_rod,
-    edge_collection_rod,
-    x_cylinder,
-    edge_cylinder,
-    radii_sum,
-    length_sum,
-    internal_forces_rod,
-    external_forces_rod,
-    external_forces_cylinder,
-    velocity_rod,
-    velocity_cylinder,
-    contact_k,
-    contact_nu,
+        x_collection_rod,
+        edge_collection_rod,
+        x_cylinder,
+        edge_cylinder,
+        radii_sum,
+        length_sum,
+        internal_forces_rod,
+        external_forces_rod,
+        external_forces_cylinder,
+        velocity_rod,
+        velocity_cylinder,
+        contact_k,
+        contact_nu,
 ):
     # We already pass in only the first n_elem x
     n_points = x_collection_rod.shape[1]
@@ -402,10 +439,10 @@ def _calculate_contact_forces_rod_rigid_body(
             continue
 
         rod_elemental_forces = 0.5 * (
-            external_forces_rod[..., i]
-            + external_forces_rod[..., i + 1]
-            + internal_forces_rod[..., i]
-            + internal_forces_rod[..., i + 1]
+                external_forces_rod[..., i]
+                + external_forces_rod[..., i + 1]
+                + internal_forces_rod[..., i]
+                + internal_forces_rod[..., i + 1]
         )
         equilibrium_forces = -rod_elemental_forces + external_forces_cylinder[..., 0]
 
@@ -419,8 +456,8 @@ def _calculate_contact_forces_rod_rigid_body(
 
         contact_force = contact_k * gamma
         interpenetration_velocity = (
-            0.5 * (velocity_rod[..., i] + velocity_rod[..., i + 1])
-            - velocity_cylinder[..., 0]
+                0.5 * (velocity_rod[..., i] + velocity_rod[..., i + 1])
+                - velocity_cylinder[..., 0]
         )
         contact_damping_force = contact_nu * _dot_product(
             interpenetration_velocity, distance_vector
@@ -428,8 +465,8 @@ def _calculate_contact_forces_rod_rigid_body(
 
         # magnitude* direction
         net_contact_force = (
-            normal_force + 0.5 * mask * (contact_damping_force + contact_force)
-        ) * distance_vector
+                                    normal_force + 0.5 * mask * (contact_damping_force + contact_force)
+                            ) * distance_vector
 
         # Add it to the rods at the end of the day
         if i == 0:
@@ -448,22 +485,22 @@ def _calculate_contact_forces_rod_rigid_body(
 
 @numba.njit(cache=True)
 def _calculate_contact_forces_rod_rod(
-    x_collection_rod_one,
-    radius_rod_one,
-    length_rod_one,
-    tangent_rod_one,
-    velocity_rod_one,
-    internal_forces_rod_one,
-    external_forces_rod_one,
-    x_collection_rod_two,
-    radius_rod_two,
-    length_rod_two,
-    tangent_rod_two,
-    velocity_rod_two,
-    internal_forces_rod_two,
-    external_forces_rod_two,
-    contact_k,
-    contact_nu,
+        x_collection_rod_one,
+        radius_rod_one,
+        length_rod_one,
+        tangent_rod_one,
+        velocity_rod_one,
+        internal_forces_rod_one,
+        external_forces_rod_one,
+        x_collection_rod_two,
+        radius_rod_two,
+        length_rod_two,
+        tangent_rod_two,
+        velocity_rod_two,
+        internal_forces_rod_two,
+        external_forces_rod_two,
+        contact_k,
+        contact_nu,
 ):
     # We already pass in only the first n_elem x
     n_points_rod_one = x_collection_rod_one.shape[1]
@@ -504,17 +541,17 @@ def _calculate_contact_forces_rod_rod(
                 continue
 
             rod_one_elemental_forces = 0.5 * (
-                external_forces_rod_one[..., i]
-                + external_forces_rod_one[..., i + 1]
-                + internal_forces_rod_one[..., i]
-                + internal_forces_rod_one[..., i + 1]
+                    external_forces_rod_one[..., i]
+                    + external_forces_rod_one[..., i + 1]
+                    + internal_forces_rod_one[..., i]
+                    + internal_forces_rod_one[..., i + 1]
             )
 
             rod_two_elemental_forces = 0.5 * (
-                external_forces_rod_two[..., j]
-                + external_forces_rod_two[..., j + 1]
-                + internal_forces_rod_two[..., j]
-                + internal_forces_rod_two[..., j + 1]
+                    external_forces_rod_two[..., j]
+                    + external_forces_rod_two[..., j + 1]
+                    + internal_forces_rod_two[..., j]
+                    + internal_forces_rod_two[..., j + 1]
             )
 
             equilibrium_forces = -rod_one_elemental_forces + rod_two_elemental_forces
@@ -529,8 +566,8 @@ def _calculate_contact_forces_rod_rod(
 
             contact_force = contact_k * gamma
             interpenetration_velocity = 0.5 * (
-                (velocity_rod_one[..., i] + velocity_rod_one[..., i + 1])
-                - (velocity_rod_two[..., j] + velocity_rod_two[..., j + 1])
+                    (velocity_rod_one[..., i] + velocity_rod_one[..., i + 1])
+                    - (velocity_rod_two[..., j] + velocity_rod_two[..., j + 1])
             )
             contact_damping_force = contact_nu * _dot_product(
                 interpenetration_velocity, distance_vector
@@ -538,8 +575,8 @@ def _calculate_contact_forces_rod_rod(
 
             # magnitude* direction
             net_contact_force = (
-                normal_force + 0.5 * mask * (contact_damping_force + contact_force)
-            ) * distance_vector
+                                        normal_force + 0.5 * mask * (contact_damping_force + contact_force)
+                                ) * distance_vector
 
             # Add it to the rods at the end of the day
             if i == 0:
@@ -565,14 +602,14 @@ def _calculate_contact_forces_rod_rod(
 
 @numba.njit(cache=True)
 def _calculate_contact_forces_self_rod(
-    x_collection_rod,
-    radius_rod,
-    length_rod,
-    tangent_rod,
-    velocity_rod,
-    external_forces_rod,
-    contact_k,
-    contact_nu,
+        x_collection_rod,
+        radius_rod,
+        length_rod,
+        tangent_rod,
+        velocity_rod,
+        external_forces_rod,
+        contact_k,
+        contact_nu,
 ):
     # We already pass in only the first n_elem x
     n_points_rod = x_collection_rod.shape[1]
@@ -617,8 +654,8 @@ def _calculate_contact_forces_self_rod(
 
             contact_force = contact_k * gamma
             interpenetration_velocity = 0.5 * (
-                (velocity_rod[..., i] + velocity_rod[..., i + 1])
-                - (velocity_rod[..., j] + velocity_rod[..., j + 1])
+                    (velocity_rod[..., i] + velocity_rod[..., i + 1])
+                    - (velocity_rod[..., j] + velocity_rod[..., j + 1])
             )
             contact_damping_force = contact_nu * _dot_product(
                 interpenetration_velocity, distance_vector
@@ -626,8 +663,8 @@ def _calculate_contact_forces_self_rod(
 
             # magnitude* direction
             net_contact_force = (
-                0.5 * mask * (contact_damping_force + contact_force)
-            ) * distance_vector
+                                        0.5 * mask * (contact_damping_force + contact_force)
+                                ) * distance_vector
 
             # Add it to the rods at the end of the day
             # if i == 0:
@@ -666,13 +703,13 @@ def _aabbs_not_intersecting(aabb_one, aabb_two):
 
 @numba.njit(cache=True)
 def _prune_using_aabbs_rod_rigid_body(
-    rod_one_position_collection,
-    rod_one_radius_collection,
-    rod_one_length_collection,
-    cylinder_position,
-    cylinder_director,
-    cylinder_radius,
-    cylinder_length,
+        rod_one_position_collection,
+        rod_one_radius_collection,
+        rod_one_length_collection,
+        cylinder_position,
+        cylinder_director,
+        cylinder_radius,
+        cylinder_length,
 ):
     max_possible_dimension = np.zeros((3,))
     aabb_rod = np.empty((3, 2))
@@ -682,10 +719,10 @@ def _prune_using_aabbs_rod_rigid_body(
     )
     for i in range(3):
         aabb_rod[i, 0] = (
-            np.min(rod_one_position_collection[i]) - max_possible_dimension[i]
+                np.min(rod_one_position_collection[i]) - max_possible_dimension[i]
         )
         aabb_rod[i, 1] = (
-            np.max(rod_one_position_collection[i]) + max_possible_dimension[i]
+                np.max(rod_one_position_collection[i]) + max_possible_dimension[i]
         )
 
     # Is actually Q^T * d but numba complains about performance so we do
@@ -697,7 +734,7 @@ def _prune_using_aabbs_rod_rigid_body(
     for i in range(3):
         for j in range(3):
             cylinder_dimensions_in_world_FOR[i] += (
-                cylinder_director[j, i, 0] * cylinder_dimensions_in_local_FOR[j]
+                    cylinder_director[j, i, 0] * cylinder_dimensions_in_local_FOR[j]
             )
 
     max_possible_dimension = np.abs(cylinder_dimensions_in_world_FOR)
@@ -708,12 +745,12 @@ def _prune_using_aabbs_rod_rigid_body(
 
 @numba.njit(cache=True)
 def _prune_using_aabbs_rod_rod(
-    rod_one_position_collection,
-    rod_one_radius_collection,
-    rod_one_length_collection,
-    rod_two_position_collection,
-    rod_two_radius_collection,
-    rod_two_length_collection,
+        rod_one_position_collection,
+        rod_one_radius_collection,
+        rod_one_length_collection,
+        rod_two_position_collection,
+        rod_two_radius_collection,
+        rod_two_length_collection,
 ):
     max_possible_dimension = np.zeros((3,))
     aabb_rod_one = np.empty((3, 2))
@@ -723,10 +760,10 @@ def _prune_using_aabbs_rod_rod(
     )
     for i in range(3):
         aabb_rod_one[i, 0] = (
-            np.min(rod_one_position_collection[i]) - max_possible_dimension[i]
+                np.min(rod_one_position_collection[i]) - max_possible_dimension[i]
         )
         aabb_rod_one[i, 1] = (
-            np.max(rod_one_position_collection[i]) + max_possible_dimension[i]
+                np.max(rod_one_position_collection[i]) + max_possible_dimension[i]
         )
 
     max_possible_dimension[...] = np.max(rod_two_radius_collection) + np.max(
@@ -735,10 +772,10 @@ def _prune_using_aabbs_rod_rod(
 
     for i in range(3):
         aabb_rod_two[i, 0] = (
-            np.min(rod_two_position_collection[i]) - max_possible_dimension[i]
+                np.min(rod_two_position_collection[i]) - max_possible_dimension[i]
         )
         aabb_rod_two[i, 1] = (
-            np.max(rod_two_position_collection[i]) + max_possible_dimension[i]
+                np.max(rod_two_position_collection[i]) + max_possible_dimension[i]
         )
 
     return _aabbs_not_intersecting(aabb_rod_two, aabb_rod_one)
@@ -772,19 +809,19 @@ class ExternalContact(FreeJoint):
             # First, check for a global AABB bounding box, and see whether that
             # intersects
             if _prune_using_aabbs_rod_rigid_body(
-                system_one.position_collection,
-                system_one.radius,
-                system_one.lengths,
-                cylinder_two.position_collection,
-                cylinder_two.director_collection,
-                cylinder_two.radius[0],
-                cylinder_two.length[0],
+                    system_one.position_collection,
+                    system_one.radius,
+                    system_one.lengths,
+                    cylinder_two.position_collection,
+                    cylinder_two.director_collection,
+                    cylinder_two.radius[0],
+                    cylinder_two.length[0],
             ):
                 return
 
             x_cyl = (
-                cylinder_two.position_collection[..., 0]
-                - 0.5 * cylinder_two.length * cylinder_two.director_collection[2, :, 0]
+                    cylinder_two.position_collection[..., 0]
+                    - 0.5 * cylinder_two.length * cylinder_two.director_collection[2, :, 0]
             )
 
             _calculate_contact_forces_rod_rigid_body(
@@ -808,18 +845,18 @@ class ExternalContact(FreeJoint):
             # intersects
 
             if _prune_using_aabbs_rod_rod(
-                system_one.position_collection,
-                system_one.radius,
-                system_one.lengths,
-                system_two.position_collection,
-                system_two.radius,
-                system_two.lengths,
+                    system_one.position_collection,
+                    system_one.radius,
+                    system_one.lengths,
+                    system_two.position_collection,
+                    system_two.radius,
+                    system_two.lengths,
             ):
                 return
 
             _calculate_contact_forces_rod_rod(
                 system_one.position_collection[
-                    ..., :-1
+                ..., :-1
                 ],  # Discount last node, we want element start position
                 system_one.radius,
                 system_one.lengths,
@@ -828,7 +865,7 @@ class ExternalContact(FreeJoint):
                 system_one.internal_forces,
                 system_one.external_forces,
                 system_two.position_collection[
-                    ..., :-1
+                ..., :-1
                 ],  # Discount last node, we want element start position
                 system_two.radius,
                 system_two.lengths,
@@ -855,7 +892,7 @@ class SelfContact(FreeJoint):
 
         _calculate_contact_forces_self_rod(
             system_one.position_collection[
-                ..., :-1
+            ..., :-1
             ],  # Discount last node, we want element start position
             system_one.radius,
             system_one.lengths,
