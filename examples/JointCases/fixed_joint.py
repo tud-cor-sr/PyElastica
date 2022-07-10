@@ -146,10 +146,16 @@ if PLOT_FIGURE:
 
 if PLOT_VIDEO:
     filename = "fixed_joint_test.mp4"
-    plot_video(pp_list_rod1, pp_list_rod2, pp_list_cylinder, video_name=filename, margin=0.2, fps=100)
+    fps = 20  # Hz
+    plot_video(
+        pp_list_rod1, pp_list_rod2, pp_list_cylinder,
+        video_name=filename, margin=0.2, fps=fps, cylinder=cylinder
+    )
     plot_video_xy(
-        pp_list_rod1, pp_list_rod2, pp_list_cylinder, video_name=filename + "_xy.mp4", margin=0.2, fps=100
+        pp_list_rod1, pp_list_rod2, pp_list_cylinder,
+        video_name=filename + "_xy.mp4", margin=0.2, fps=fps, cylinder=cylinder
     )
     plot_video_xz(
-        pp_list_rod1, pp_list_rod2, pp_list_cylinder, video_name=filename + "_xz.mp4", margin=0.2, fps=100
+        pp_list_rod1, pp_list_rod2, pp_list_cylinder,
+        video_name=filename + "_xz.mp4", margin=0.2, fps=fps, cylinder=cylinder
     )
