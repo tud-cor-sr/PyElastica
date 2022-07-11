@@ -42,6 +42,7 @@ shear_modulus = E / (poisson_ratio + 1.0)
 
 start_rod_1 = np.zeros((3,))
 start_rod_2 = start_rod_1 + direction * base_length
+start_cylinder = start_rod_2 + direction * base_length
 
 # Create rod 1
 rod1 = CosseratRod.straight_rod(
@@ -71,6 +72,16 @@ rod2 = CosseratRod.straight_rod(
     shear_modulus=shear_modulus,
 )
 hinge_joint_sim.append(rod2)
+# Create cylinder
+cylinder = Cylinder(
+    start=start_cylinder,
+    direction=direction,
+    normal=normal,
+    base_length=base_length,
+    base_radius=base_radius,
+    density=density,
+)
+hinge_joint_sim.append(cylinder)
 
 # Apply boundary conditions to rod1.
 hinge_joint_sim.constrain(rod1).using(
@@ -83,6 +94,10 @@ hinge_joint_sim.connect(
 ).using(
     HingeJoint, k=1e5, nu=0, kt=5e3, normal_direction=roll_direction
 )  # 1e-2
+# Connect rod 2 and cylinder
+hinge_joint_sim.connect(
+    first_rod=rod2, second_rod=cylinder, first_connect_idx=-1, second_connect_idx=0
+).using(HingeJoint, k=1e5, nu=0, point_system_two=np.array([0., 0., -base_length / 2]))
 
 # Add forces to rod2
 hinge_joint_sim.add_forcing_to(rod2).using(
@@ -97,6 +112,7 @@ hinge_joint_sim.add_forcing_to(rod2).using(
 
 pp_list_rod1 = defaultdict(list)
 pp_list_rod2 = defaultdict(list)
+pp_list_cylinder = defaultdict(list)
 
 
 hinge_joint_sim.collect_diagnostics(rod1).using(
@@ -104,6 +120,9 @@ hinge_joint_sim.collect_diagnostics(rod1).using(
 )
 hinge_joint_sim.collect_diagnostics(rod2).using(
     JointCasesCallback, step_skip=1000, callback_params=pp_list_rod2
+)
+hinge_joint_sim.collect_diagnostics(cylinder).using(
+    JointCasesCallback, step_skip=1000, callback_params=pp_list_cylinder
 )
 
 
@@ -125,14 +144,22 @@ PLOT_VIDEO = False
 # plotting results
 if PLOT_FIGURE:
     filename = "hinge_joint_test.png"
-    plot_position(pp_list_rod1, pp_list_rod2, plot_params_cylinder=None, filename=filename, SAVE_FIGURE=SAVE_FIGURE)
+    plot_position(
+        pp_list_rod1, pp_list_rod2, plot_params_cylinder=pp_list_cylinder, filename=filename, SAVE_FIGURE=SAVE_FIGURE
+    )
 
 if PLOT_VIDEO:
     filename = "hinge_joint_test.mp4"
-    plot_video(pp_list_rod1, pp_list_rod2, plot_params_cylinder=None, video_name=filename, margin=0.2, fps=100)
+    fps = 100
+    plot_video(
+        pp_list_rod1, pp_list_rod2, plot_params_cylinder=pp_list_cylinder,
+        video_name=filename, margin=0.2, fps=fps, cylinder=cylinder
+    )
     plot_video_xy(
-        pp_list_rod1, pp_list_rod2, plot_params_cylinder=None, video_name=filename + "_xy.mp4", margin=0.2, fps=100
+        pp_list_rod1, pp_list_rod2, plot_params_cylinder=pp_list_cylinder,
+        video_name=filename + "_xy.mp4", margin=0.2, fps=fps, cylinder=cylinder
     )
     plot_video_xz(
-        pp_list_rod1, pp_list_rod2, plot_params_cylinder=None, video_name=filename + "_xz.mp4", margin=0.2, fps=100
+        pp_list_rod1, pp_list_rod2, plot_params_cylinder=pp_list_cylinder,
+        video_name=filename + "_xz.mp4", margin=0.2, fps=fps, cylinder=cylinder
     )
