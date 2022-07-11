@@ -45,10 +45,10 @@ class FreeJoint:
            Stiffness coefficient of the joint.
         nu: float
            Damping coefficient of the joint.
-        point_system_one : numpy.ndarray
+        point_system_one : numpy.ndarray = np.array([0., 0., 0.])
             Describes for system one the translation from the center of mass
             to the joint in the local coordinate system of system one
-        point_system_two : numpy.ndarray
+        point_system_two : numpy.ndarray = np.array([0., 0., 0.])
             Describes for system two the translation from the center of mass
             to the joint in the local coordinate system of system two
 
@@ -76,6 +76,8 @@ class FreeJoint:
         -------
 
         """
+        # Compute the positions and velocities of both systems at the joint.
+        # Either system can either be a rod or a rigid body
         system_positions = []
         system_velocities = []
         for system, index, point in zip([system_one, system_two], [index_one, index_two],
@@ -115,24 +117,27 @@ class FreeJoint:
 
         contact_force = elastic_force + damping_force
 
-        i = 0
-        for system, index, point, system_position in zip([system_one, system_two],
-                                                         [index_one, index_two],
-                                                         [self.point_system_one, self.point_system_two],
-                                                         system_positions):
+        for i, (system, index, point, system_position) in enumerate(zip(
+                    [system_one, system_two],
+                    [index_one, index_two],
+                    [self.point_system_one, self.point_system_two],
+                    system_positions
+                )):
             external_force = (1 - 2 * i) * contact_force
 
             if np.array_equal(point, np.array([0., 0., 0.])):
-                # we can save us the computation
+                # if the joint is placed at the center of mass of the rigid body or directly at the node
+                # no torques need to applied to the system and we can save computation time
                 system.external_forces[..., index] += external_force
             else:
+                # the contact force needs to be applied at a distance from the Center of Mass (CoM) of the rigid body
+                # or the node of the Cosserat rod.
+                # Accordingly, we need to compute the torque to be applied to CoM / node.
                 vector_center_to_point = system.position_collection[..., index] - system_position
                 external_torque = np.cross(vector_center_to_point, external_force)
 
                 system.external_forces[..., index] += external_force
                 system.external_torques[..., index] += external_torque
-
-            i += 1
 
         return
 
