@@ -183,7 +183,8 @@ def plot_video_xy(
                     cylinder_director_batched = np.repeat(cylinder_director,
                                                           repeats=cylinder_axis_points.shape[1], axis=2)
                     # rotate points into inertial frame
-                    cylinder_axis_points = _batch_matvec(cylinder_director_batched, cylinder_axis_points)
+                    cylinder_axis_points = _batch_matvec(cylinder_director_batched.transpose((1, 0, 2)),
+                                                         cylinder_axis_points)
                     # add offset position of CoM
                     cylinder_axis_points += position_of_cylinder[time, ...]
                     plt.plot(
@@ -253,7 +254,8 @@ def plot_video_xz(
                     cylinder_director_batched = np.repeat(cylinder_director,
                                                           repeats=cylinder_axis_points.shape[1], axis=2)
                     # rotate points into inertial frame
-                    cylinder_axis_points = _batch_matvec(cylinder_director_batched, cylinder_axis_points)
+                    cylinder_axis_points = _batch_matvec(cylinder_director_batched.transpose((1, 0, 2)),
+                                                         cylinder_axis_points)
                     # add offset position of CoM
                     cylinder_axis_points += position_of_cylinder[time, ...]
                     plt.plot(
