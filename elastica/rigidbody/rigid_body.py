@@ -111,10 +111,10 @@ class RigidBodyBase(ABC):
         """
         if index is None:
             # batched implementation for all nodes
-            position = self.position_collection + _batch_matvec(self.director_collection, point)
+            position = self.position_collection + _batch_matvec(self.director_collection.transpose(1, 0, 2), point)
         else:
             # only compute for one node
-            position = self.position_collection[..., index] + np.dot(self.director_collection[..., index], point)
+            position = self.position_collection[..., index] + np.dot(self.director_collection[..., index].T, point)
         return position
 
     def compute_velocity_point(self, point=np.array([0., 0., 0.]), index: int = None):
