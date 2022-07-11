@@ -294,10 +294,10 @@ class FixedJoint(FreeJoint):
         ]  # second element of rod2
 
         # Compute the restoring torque
-        forcedirection = -self.kt * (
+        force_direction = -self.kt * (
                 curr_destination - tgt_destination
         )  # force direction is between rod2 2nd element and rod1
-        torque = np.cross(link_direction, forcedirection)
+        torque = np.cross(link_direction, force_direction)
 
         # The opposite torque will be applied on link one
         system_one.external_torques[..., index_one] -= (
