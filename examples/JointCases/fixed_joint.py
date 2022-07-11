@@ -146,7 +146,7 @@ if PLOT_FIGURE:
 
 if PLOT_VIDEO:
     filename = "fixed_joint_test.mp4"
-    fps = 20  # Hz
+    fps = 100  # Hz
     plot_video(
         pp_list_rod1, pp_list_rod2, pp_list_cylinder,
         video_name=filename, margin=0.2, fps=fps, cylinder=cylinder

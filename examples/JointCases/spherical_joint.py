@@ -147,11 +147,16 @@ if PLOT_FIGURE:
 
 if PLOT_VIDEO:
     filename = "spherical_joint_test"
-    fps = 20  # Hz
+    fps = 100  # Hz
     plot_video(
         pp_list_rod1, pp_list_rod2, pp_list_cylinder,
+        video_name=filename + ".mp4", margin=0.2, fps=fps, cylinder=cylinder
     )
     plot_video_xy(
+        pp_list_rod1, pp_list_rod2, pp_list_cylinder,
+        video_name=filename + "_xy.mp4", margin=0.2, fps=fps, cylinder=cylinder
     )
     plot_video_xz(
+        pp_list_rod1, pp_list_rod2, pp_list_cylinder,
+        video_name=filename + "_xz.mp4", margin=0.2, fps=fps, cylinder=cylinder
     )
