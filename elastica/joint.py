@@ -118,11 +118,11 @@ class FreeJoint:
         contact_force = elastic_force + damping_force
 
         for i, (system, index, point, system_position) in enumerate(zip(
-                    [system_one, system_two],
-                    [index_one, index_two],
-                    [self.point_system_one, self.point_system_two],
-                    system_positions
-                )):
+                [system_one, system_two],
+                [index_one, index_two],
+                [self.point_system_one, self.point_system_two],
+                system_positions
+        )):
             external_force = (1 - 2 * i) * contact_force
 
             if np.array_equal(point, np.array([0., 0., 0.])):
@@ -277,38 +277,33 @@ class FixedJoint(FreeJoint):
         return super().apply_forces(system_one, index_one, system_two, index_two)
 
     def apply_torques(self, system_one, index_one, system_two, index_two):
-        # current direction of the first element of link two
-        # also NOTE: - rod two is fixed at first element
-        link_direction = (
-                system_two.position_collection[..., index_two + 1]
-                - system_two.position_collection[..., index_two]
-        )
+        system_one_director = system_one.director_collection[..., index_one]
+        system_two_director = system_two.director_collection[..., index_two]
 
-        # To constrain the orientation of link two, the second node of link two should align with
-        # the direction of link one. Thus, we compute the desired position of the second node of link two
-        # as check1, and the current position of the second node of link two as check2. Check1 and check2
-        # should overlap.
+        # relative rotation matrix from system 1 to system 2: C_12 = C_1I @ C_I2 where I denotes the inertial frame
+        rel_rot_mat = system_one_director @ system_two_director.T
 
-        tgt_destination = (
-                system_one.position_collection[..., index_one]
-                + system_two.rest_lengths[index_two] * system_one.tangents[..., index_one]
-        )  # dl of rod 2 can be different than rod 1 so use rest length of rod 2
+        # decompose the relative rotation into angles axis: \delta phi = \delta \theta * n
+        # where \delta phi is the rotation vector, n is the axis of rotation and \theta is the angle of rotation
+        # to prevent singularities of arccos, we clip the values to the interval [-1, 1]
+        theta = np.arccos(np.clip((rel_rot_mat[0, 0] + rel_rot_mat[1, 1] + rel_rot_mat[2, 2] - 1) / 2, -1, 1))
 
-        curr_destination = system_two.position_collection[
-            ..., index_two + 1
-        ]  # second element of rod2
+        eps = Tolerance.atol()  # prevent division by zero for theta = 0.0
+        # axis of rotation between system 1 and system 2 in local frame of system 1
+        n = 1 / (2 * np.sin(theta) + eps) * np.array([rel_rot_mat[2, 1] - rel_rot_mat[1, 2],
+                                                      rel_rot_mat[0, 2] - rel_rot_mat[2, 0],
+                                                      rel_rot_mat[1, 0] - rel_rot_mat[0, 1]])
+        # rotate n into inertial frame
+        n = system_one_director.T @ n
 
-        # Compute the restoring torque
-        force_direction = -self.kt * (
-                curr_destination - tgt_destination
-        )  # force direction is between rod2 2nd element and rod1
-        torque = np.cross(link_direction, force_direction)
+        # we compute the constraining torque using a torque spring
+        torque = self.kt * theta * n
 
-        # The opposite torque will be applied on link one
+        # The opposite torques will be applied to system one and two
         system_one.external_torques[..., index_one] -= (
                 system_one.director_collection[..., index_one] @ torque
         )
-        system_two.external_torques[..., index_two] += (
+        system_two.external_torques[..., index_two] -= (
                 system_two.director_collection[..., index_two] @ torque
         )
 
