@@ -253,9 +253,11 @@ class FixedJoint(FreeJoint):
             Damping coefficient of the joint.
         kt: float
             Rotational stiffness coefficient of the joint.
+        nut: float
+            Rotational damping coefficient of the joint.
     """
 
-    def __init__(self, k, nu, kt):
+    def __init__(self, k, nu, kt, nut=0.):
         """
 
         Parameters
@@ -266,11 +268,14 @@ class FixedJoint(FreeJoint):
             Damping coefficient of the joint.
         kt: float
             Rotational stiffness coefficient of the joint.
+        nut: float = 0.
+            Rotational damping coefficient of the joint.
         """
         super().__init__(k, nu)
         # additional in-plane constraint through restoring torque
         # stiffness of the restoring constraint -- tuned empirically
         self.kt = kt
+        self.nut = nut
 
     # Apply force is same as free joint
     def apply_forces(self, system_one, index_one, system_two, index_two):
@@ -281,23 +286,29 @@ class FixedJoint(FreeJoint):
         system_two_director = system_two.director_collection[..., index_two]
 
         # relative rotation matrix from system 1 to system 2: C_12 = C_1I @ C_I2 where I denotes the inertial frame
-        rel_rot_mat = system_one_director @ system_two_director.T
+        error_rot = system_one_director @ system_two_director.T
 
         # decompose the relative rotation into angles axis: \delta phi = \delta \theta * n
         # where \delta phi is the rotation vector, n is the axis of rotation and \theta is the angle of rotation
         # to prevent singularities of arccos, we clip the values to the interval [-1, 1]
-        theta = np.arccos(np.clip((rel_rot_mat[0, 0] + rel_rot_mat[1, 1] + rel_rot_mat[2, 2] - 1) / 2, -1, 1))
+        theta = np.arccos(np.clip((error_rot[0, 0] + error_rot[1, 1] + error_rot[2, 2] - 1) / 2, -1, 1))
 
         eps = Tolerance.atol()  # prevent division by zero for theta = 0.0
         # axis of rotation between system 1 and system 2 in local frame of system 1
-        n = 1 / (2 * np.sin(theta) + eps) * np.array([rel_rot_mat[2, 1] - rel_rot_mat[1, 2],
-                                                      rel_rot_mat[0, 2] - rel_rot_mat[2, 0],
-                                                      rel_rot_mat[1, 0] - rel_rot_mat[0, 1]])
+        n = 1 / (2 * np.sin(theta) + eps) * np.array([error_rot[2, 1] - error_rot[1, 2],
+                                                      error_rot[0, 2] - error_rot[2, 0],
+                                                      error_rot[1, 0] - error_rot[0, 1]])
         # rotate n into inertial frame
         n = system_one_director.T @ n
 
-        # we compute the constraining torque using a torque spring
+        # we compute the constraining torque using a rotational spring - damper system in the inertial frame
         torque = self.kt * theta * n
+
+        # add damping torque
+        if self.nut > 0.:
+            # error in rotation velocity between system 1 and system 2
+            error_omega = system_two.omega_collection[..., index_two] - system_one.omega_collection[..., index_one]
+            torque += self.nut * error_omega
 
         # The opposite torques will be applied to system one and two
         system_one.external_torques[..., index_one] -= (
