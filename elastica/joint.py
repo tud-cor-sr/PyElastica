@@ -291,6 +291,7 @@ class FixedJoint(FreeJoint):
 
         # compute rotation vectors based on relative rotation matrix
         rot_vec = Rotation.from_matrix(error_rot).as_rotvec(degrees=False)
+
         # rotate rotation vector into inertial frame
         rot_vec = system_one_director.T @ rot_vec
 
@@ -304,7 +305,7 @@ class FixedJoint(FreeJoint):
             torque += self.nut * error_omega
 
         # The opposite torques will be applied to system one and two
-        system_one.external_torques[..., index_one] -= system_one_director @ torque
+        system_one.external_torques[..., index_one] += system_one_director @ torque
         system_two.external_torques[..., index_two] -= system_two_director @ torque
 
 
