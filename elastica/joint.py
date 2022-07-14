@@ -6,6 +6,7 @@ import numba
 from elastica.utils import Tolerance, MaxDimension
 from elastica._linalg import _batch_product_k_ik_to_ik
 from math import sqrt
+from scipy.spatial.transform import Rotation
 
 
 class FreeJoint:
@@ -288,21 +289,13 @@ class FixedJoint(FreeJoint):
         # relative rotation matrix from system 1 to system 2: C_12 = C_1I @ C_I2 where I denotes the inertial frame
         error_rot = system_one_director @ system_two_director.T
 
-        # decompose the relative rotation into angles axis: \delta phi = \delta \theta * n
-        # where \delta phi is the rotation vector, n is the axis of rotation and \theta is the angle of rotation
-        # to prevent singularities of arccos, we clip the values to the interval [-1, 1]
-        theta = np.arccos(np.clip((error_rot[0, 0] + error_rot[1, 1] + error_rot[2, 2] - 1) / 2, -1, 1))
-
-        eps = Tolerance.atol()  # prevent division by zero for theta = 0.0
-        # axis of rotation between system 1 and system 2 in local frame of system 1
-        n = 1 / (2 * np.sin(theta) + eps) * np.array([error_rot[2, 1] - error_rot[1, 2],
-                                                      error_rot[0, 2] - error_rot[2, 0],
-                                                      error_rot[1, 0] - error_rot[0, 1]])
-        # rotate n into inertial frame
-        n = system_one_director.T @ n
+        # compute rotation vectors based on relative rotation matrix
+        rot_vec = Rotation.from_matrix(error_rot).as_rotvec(degrees=False)
+        # rotate rotation vector into inertial frame
+        rot_vec = system_one_director.T @ rot_vec
 
         # we compute the constraining torque using a rotational spring - damper system in the inertial frame
-        torque = self.kt * theta * n
+        torque = self.kt * rot_vec
 
         # add damping torque
         if self.nut > 0.:
@@ -311,12 +304,8 @@ class FixedJoint(FreeJoint):
             torque += self.nut * error_omega
 
         # The opposite torques will be applied to system one and two
-        system_one.external_torques[..., index_one] -= (
-                system_one.director_collection[..., index_one] @ torque
-        )
-        system_two.external_torques[..., index_two] -= (
-                system_two.director_collection[..., index_two] @ torque
-        )
+        system_one.external_torques[..., index_one] -= system_one_director @ torque
+        system_two.external_torques[..., index_two] -= system_two_director @ torque
 
 
 @numba.njit(cache=True)
