@@ -43,7 +43,6 @@ shear_modulus = E / (poisson_ratio + 1.0)
 
 start_rod_1 = np.zeros((3,))
 start_rod_2 = start_rod_1 + direction * base_length
-start_cylinder = start_rod_2 + direction * base_length
 
 # Create rod 1
 rod1 = CosseratRod.straight_rod(
@@ -139,3 +138,28 @@ plot_orientation_vs_time("Orientation of last node of rod 1", pp_list_rod1["time
                          np.array(pp_list_rod1["director"])[..., -1])
 plot_orientation_vs_time("Orientation of last node of rod 2", pp_list_rod2["time"],
                          np.array(pp_list_rod2["director"])[..., -1])
+
+PLOT_FIGURE = True
+SAVE_FIGURE = True
+PLOT_VIDEO = True
+
+# plotting results
+if PLOT_FIGURE:
+    filename = "fixed_joint_torsion_test.png"
+    plot_position(pp_list_rod1, pp_list_rod2, None, filename, SAVE_FIGURE)
+
+if PLOT_VIDEO:
+    filename = "fixed_joint_torsion_test"
+    fps = 100  # Hz
+    plot_video(
+        pp_list_rod1, pp_list_rod2, None,
+        video_name=filename + ".mp4", margin=0.2, fps=fps
+    )
+    plot_video_xy(
+        pp_list_rod1, pp_list_rod2, None,
+        video_name=filename + "_xy.mp4", margin=0.2, fps=fps
+    )
+    plot_video_xz(
+        pp_list_rod1, pp_list_rod2, None,
+        video_name=filename + "_xz.mp4", margin=0.2, fps=fps
+    )
